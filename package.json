@@ -1,0 +1,29 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "cors": "^2.8.5",
+    "data-forge": "^1.7.7",
+    "express": "^4.17.1",
+    "firebase": "^7.14.3",
+    "fs": "0.0.1-security",
+    "http": "0.0.0",
+    "mongoose": "^5.9.11",
+    "mysql": "^2.18.1",
+    "node-id3": "^0.1.13",
+    "nodemon": "^2.0.2",
+    "path": "^0.12.7",
+    "socket.io": "^2.3.0",
+    "socket.io-stream": "^0.9.1",
+    "text-encoding": "^0.7.0"
+  }
+}
