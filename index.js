@@ -19,28 +19,12 @@ const server = http.createServer(app);
 // const io = socketio(server);
 
 // parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({extended: false}));
 
 // parse application/json
 app.use(bodyParser.json());
 
-api.getTracks({pathname:'/home'}, function (response) {
-    console.log('resp', response);
-});
-
 // app.use(cors());
-// app.get('/data', (req, res) => {
-//     const filePath = path.resolve(__dirname, './private', './track2.mp3');
-//
-//     const HWM = 64 * 1024;
-//     const chunk = 8;
-//     const readStream_ = fs.createReadStream(filePath, {
-//         highWaterMark: HWM,
-//         start: chunk * HWM,
-//         end: (chunk + 1) * HWM
-//     });
-//     return readStream_.pipe(res);
-// });
 
 const io = socketio.listen(server, {
     log: false,
@@ -48,18 +32,6 @@ const io = socketio.listen(server, {
     origins: '*:*',
     transports: ['websocket', 'htmlfile', 'xhr-polling', 'jsonp-polling', 'polling']
 });
-
-// let synchToInt = synch => {
-//     const mask = 0b01111111;
-//     let b1 = synch & mask;
-//     let b2 = (synch >> 8) & mask;
-//     let b3 = (synch >> 16) & mask;
-//     let b4 = (synch >> 24) & mask;
-//
-//     return b1 | (b2 << 7) | (b3 << 14) | (b4 << 21);
-// };
-//
-// let decode = (format, string) => new TextDecoder(format).decode(string);
 
 const MPEG_version = {
     '00': 'MPEG-2.5',
@@ -90,6 +62,34 @@ const Frequency_index = {
         '00': 11025,
         '01': 12000,
         '10': 8000
+    }
+};
+
+const Channel_Mode_Index = {
+    '00': 'Stereo',
+    '01': 'Join stereo',
+    '10': 'Dual channel',
+    '11': 'Mono'
+};
+
+const XING_offset = {
+    [MPEG_version['11']]: {
+        [Channel_Mode_Index['00']]: 32,
+        [Channel_Mode_Index['01']]: 32,
+        [Channel_Mode_Index['10']]: 32,
+        [Channel_Mode_Index['11']]: 17
+    },
+    [MPEG_version['10']]: {
+        [Channel_Mode_Index['00']]: 17,
+        [Channel_Mode_Index['01']]: 17,
+        [Channel_Mode_Index['10']]: 17,
+        [Channel_Mode_Index['11']]: 9
+    },
+    [MPEG_version['00']]: {
+        [Channel_Mode_Index['00']]: 17,
+        [Channel_Mode_Index['01']]: 17,
+        [Channel_Mode_Index['10']]: 17,
+        [Channel_Mode_Index['11']]: 9
     }
 };
 
@@ -139,36 +139,62 @@ const samples_per_frame = {
 //     return str;
 // }
 //
-// function convert(hex) {
-//     return (parseInt(hex, 16).toString(2)).padStart(8, '0');
-// }
-//
-// function hex2bin(hex) {
-//     let hexStr = hex.split('');
-//     let result = "";
-//     let offset = 0;
-//     while (offset < hexStr.length) {
-//         result += convert(hexStr[offset] + '' + hexStr[offset + 1]);
-//         offset += 2;
-//     }
-//     // console.log(result);
-//     return result;
-// }
+function convert(hex) {
+    return (parseInt(hex, 16).toString(2)).padStart(8, '0');
+}
+
+function hex2bin(hex) {
+    let hexStr = hex.split('');
+    let result = "";
+    let offset = 0;
+    while (offset < hexStr.length) {
+        result += convert(hexStr[offset] + '' + hexStr[offset + 1]);
+        offset += 2;
+    }
+    // console.log(result);
+    return result;
+}
 
 io.on('connection', client => {
 
     console.log('Client connected');
 
-     let filePath = null;
-     let stat = null;
-     let fileSize = null;
-     let chunkSize = null;
-     // let fileDuration = null;
+    let filePath = null;
+    let stat = null;
+    let fileSize = null;
+    let chunkSize = null;
+    let fileDuration = null;
+
+    let readStream;
 
     // const stream = ss.createStream();
 
-    client.on('addTrack', () => {
+    client.on('signUp', ({user}, callback) => {
+        console.log(user);
+        api.signUp(user, function (response) {
+            console.log('response', response);
+            callback(response);
+        });
+    });
 
+    client.on('signIn', ({user}, callback) => {
+        api.signIn(user, function (response) {
+            callback(response);
+        })
+    });
+
+    client.on('verifyToken', ({token}, callback) => {
+        console.log('token', token);
+        api.checkVerified(token, function (response) {
+            console.log(response);
+            callback(response);
+        });
+    });
+
+    client.on('addTrack', ({trackInfo}, callback) => {
+        api.addTrack(trackInfo, function (response) {
+
+        });
     });
 
     client.on('getTracks', ({pathname}, callback) => {
@@ -181,87 +207,127 @@ io.on('connection', client => {
         });
     });
 
-    client.on('track', () => {
-        //search in DB by id, get filePath
+    client.on('searchTracks', ({value}, callback) => {
+        console.log('regexp', value);
 
-        filePath = path.resolve(__dirname, './private', './track2.mp3');
-        stat = fs.statSync(filePath);
-        fileSize = stat.size;
-        chunkSize = Math.floor(fileSize / 10);
-
-        console.log('track event fileSize:', fileSize);
-        const readStream = fs.createReadStream(filePath, {start: 0, end: 100});
-
-        let offset;
-
-        readStream.on('data', (chunk) => {
-            // offset = chunk.lastIndexOf(new Uint8Array([255, 251]));
-            //     const hexString = chunk.toString('hex');
-            //     let binString = hex2bin(hexString);
-            //
-            //     let mpeg_version = null;
-            //     let layout_version = null;
-            //     let samples_number = null;
-            //
-            //     let First_Frame_header_position = 0;
-            //     let offset = 0;
-            //     while (offset <= binString.length) {
-            //         const sync = binString.substr(offset, 11);
-            //         // console.log(sync);
-            //         if (sync === '11111111111') {
-            //             First_Frame_header_position = offset;
-            //             break;
-            //         } else {
-            //             ++offset;
-            //         }
-            //     }
-            //
-            //     let Xing_VBRI_header_position = null;
-            //     if (offset !== binString.length) {
-            //         Xing_VBRI_header_position = First_Frame_header_position + 4 * 8 + 32 * 8;
-            //         console.log('xing ' + Xing_VBRI_header_position);
-            //         const info = hex2a(parseInt(binString.substr(Xing_VBRI_header_position, 32), 2).toString(16));
-            //         console.log(info);
-            //         let numberOfFrames_position = null;
-            //         let sample_frequency = null;
-            //         let time_per_frame = null;
-            //         if (info === 'Xing' || info === 'Info') {
-            //             console.log('This is a VBR MP3 with Xing header');
-            //             numberOfFrames_position = Xing_VBRI_header_position + 8 * 8;
-            //             console.log('numberOfFrames_position ' + numberOfFrames_position);
-            //             console.log(binString.substr(numberOfFrames_position, 32));
-            //
-            //             numberOfFrames = parseInt(binString.substr(numberOfFrames_position, 32), 2);
-            //             console.log("numberOfFrames", numberOfFrames);
-            //             mpeg_version = MPEG_version[binString.substr(11, 2)];
-            //             console.log("mpeg_version", mpeg_version);
-            //             layout_version = Layer_index[binString.substr(13, 2)];
-            //             console.log("layout_version", layout_version);
-            //             samples_number = samples_per_frame[mpeg_version][layout_version];
-            //             // samples_number = samples_per_frame.get([mpeg_version, layout_version]);
-            //             console.log("samples_number", samples_number);
-            //             sample_frequency = Frequency_index[mpeg_version][binString.substr(20, 2)];
-            //             console.log("sample_frequency", sample_frequency);
-            //             time_per_frame = samples_number / sample_frequency;
-            //             console.log("time_per_frame", time_per_frame);
-            //             fileDuration = time_per_frame * numberOfFrames;
-            //             console.log("fileDuration", fileDuration);
-            //         } else if (info === 'VBRI') {
-            //             console.log('This is a VBR MP3 with VBRI header');
-            //         } else {
-            //             console.log('This is a CBR MP3');
-            //         }
-            //     } else {
-            //         console.log('frame not found!');
-            //     }
-            //
-            //     console.log('Xing_VBRI_header_position', Xing_VBRI_header_position / 8);
-        });
-
-        client.emit('metadata', {
-            fileSize, chunkSize
+        api.getMatchTracks(value, function (response) {
+            callback(response);
         });
     });
+
+    client.on('track', ({id}) => {
+        const NUM_OF_CHUNKS = 10;
+
+        console.log('id', id);
+        api.getPathTrack(id, function (response) {
+            console.log('filePath', response);
+
+            filePath = path.resolve(__dirname, `./${response[1]}`, `./${response[2]}`);
+            stat = fs.statSync(filePath);
+            fileSize = stat.size;
+            chunkSize = Math.floor(fileSize / NUM_OF_CHUNKS);
+
+            console.log('track event fileSize:', fileSize);
+            // const readMetaStream = fs.createReadStream(filePath, {highWaterMark: fileSize, start: 0, end: fileSize});
+
+            let mpeg_version;
+            let channel_mode;
+            let xing_offset;
+            let layout_version;
+            let samples_number;
+            let sample_frequency;
+            let bitrate;
+            let time_per_frame;
+
+            let First_Frame_header_position;
+            let XING_header_position;
+            let VBRI_header_position;
+
+            // readMetaStream.on('data', (chunk) => {
+            fs.readFile(filePath, function (err, chunk) {
+                First_Frame_header_position = chunk.indexOf(new Uint8Array([255, 251]));
+                if (First_Frame_header_position === -1) First_Frame_header_position = chunk.indexOf(new Uint8Array([255, 250]));
+
+                console.log('First_Frame_header_position', First_Frame_header_position);
+                console.log('chunk size', chunk.length);
+
+                if (First_Frame_header_position !== -1) {
+                    const headerBin = hex2bin(chunk.slice(First_Frame_header_position, First_Frame_header_position + 4).toString('hex'));
+                    mpeg_version = MPEG_version[headerBin.substr(11, 2)];
+                    console.log('mpeg_version', mpeg_version);
+
+                    layout_version = Layer_index[headerBin.substr(13, 2)];
+                    console.log("layout_version", layout_version);
+
+                    samples_number = samples_per_frame[mpeg_version][layout_version];
+                    console.log("samples_number", samples_number);
+
+                    sample_frequency = Frequency_index[mpeg_version][headerBin.substr(20, 2)];
+                    console.log("sample_frequency", sample_frequency);
+
+                    time_per_frame = samples_number / sample_frequency;
+                    console.log("time_per_frame", time_per_frame);
+
+                    channel_mode = Channel_Mode_Index[headerBin.substr(24, 2)];
+                    console.log('channel_mode', channel_mode);
+
+                    xing_offset = XING_offset[mpeg_version][channel_mode];
+                    console.log('xing_offset', xing_offset);
+
+                    XING_header_position = First_Frame_header_position + 4 + xing_offset;
+                    console.log('Xing', XING_header_position);
+
+                    VBRI_header_position = First_Frame_header_position + 4 + 32;
+                    console.log('VBRI', VBRI_header_position);
+
+                    const info = chunk.slice(XING_header_position, XING_header_position + 4).toString();
+                    const vbri = chunk.slice(VBRI_header_position, VBRI_header_position + 4).toString();
+
+                    let numberOfFrames_position;
+                    let numberOfFrames;
+                    if (info === 'Xing' || info === 'Info') {
+                        console.log('This is a VBR MP3 with Xing header');
+
+                        numberOfFrames_position = XING_header_position + 8;
+                        numberOfFrames = chunk.slice(numberOfFrames_position, numberOfFrames_position + 4).readUInt32BE();
+                        console.log('numberOfFrames', numberOfFrames);
+
+                        fileDuration = time_per_frame * numberOfFrames;
+                        console.log('fileDuration', fileDuration);
+                    } else if (vbri === 'VBRI') {
+                        console.log('This is a VBR MP3 with VBRI header');
+                    } else {
+                        console.log('This is a CBR MP3');
+
+                        bitrate = headerBin.substr(16, 4);
+                        console.log('bitrate', bitrate);
+
+                        // const frame_size = 4*8 + time_per_frame * 128 * 1000;
+                        console.log(fileSize);
+                        fileDuration = fileSize * 8 / (128 * 1000);
+
+                        // Frame_Size = 144 * Bitrate / Sample_Frequency + Padding Size;
+                        // const total_frame_number = fileSize / frame_size;
+                        // fileDuration = time_per_frame * total_frame_number;
+                        console.log('fileDuration', fileDuration);
+                    }
+
+                    client.emit('metadata', {
+                        fileSize, chunkSize, fileDuration
+                    });
+                } else {
+                    console.log('no header');
+                }
+            });
+
+            // readMetaStream.on('end', () => {
+            //     client.emit('metadata', {
+            //         fileSize, chunkSize, fileDuration
+            //     });
+            // });
+        });
+    });
+    let isStopped = false;
 
     client.on('play', ({startSize}) => {
         // let numberOfFrames = 0;
@@ -271,253 +337,92 @@ io.on('connection', client => {
         console.log('chunkSize', chunkSize);
         console.log('startSize', startSize);
 
-        // const HWM = 64 * 1024;
-        //     // const chunk_ = 8;
-        //     const readStream_ = fs.createReadStream(filePath, {
-        //         highWaterMark: HWM,
-        //         start: chunk_ * HWM,
-        //         end: (chunk_ + 5) * HWM
-        //     });
-
-        console.log('chunkSize', chunkSize);
-
-        const readStream_ = fs.createReadStream(filePath, {
-            highWaterMark: chunkSize,
-            start: startSize,
-            end: fileSize
+        readStream = fs.createReadStream(filePath, {
+            highWaterMark: chunkSize
+            // start: startSize,
+            // end: fileSize
         });
 
         let offset_ = 0;
         let chunkBuffer = null;
+        let totalBuffer = null;
 
-        readStream_.on('data', (chunk) => {
+        readStream.on('data', (chunk) => {
             console.log('chunk', chunk.length);
+
+            // if(!isStopped) {
+            console.log('playing !!!!!!!');
+
+            const previousOffset = Object.assign({}, offset_);
 
             offset_ = chunk.lastIndexOf(new Uint8Array([255, 251]));
 
-            console.log('offset_', offset_);
+            // console.log('offset_', offset_);
 
             if (offset_ !== -1) {
                 chunkBuffer = chunkBuffer ? Buffer.concat([chunkBuffer, chunk.slice(0, offset_)]) : chunk.slice(0, offset_);
-                console.log('chunkBuffer2', chunkBuffer.length);
+                // console.log('chunkBuffer2', chunkBuffer.length);
 
-                // if (chunkBuffer.length >= chunkSize) {
-                //     console.log('!!!', chunkBuffer.length);
+                totalBuffer = totalBuffer ? Buffer.concat([totalBuffer, chunkBuffer]) : chunkBuffer;
+                console.log('totalBuffer', totalBuffer.length);
+                if (startSize > 0) {
+                    if ((totalBuffer.length - chunkBuffer.length) <= startSize && startSize <= totalBuffer.length) {
+                        console.log(totalBuffer.length - chunkBuffer.length);
+                        console.log('chunkBuffer', chunkBuffer.length);
+                        const offset = totalBuffer.slice(0, startSize).lastIndexOf(new Uint8Array([255, 251]));
 
+                        if (offset !== -1) {
+                            const header = chunkBuffer.slice(offset, offset + 4);
+
+                            console.log('header', header);
+                            console.log('startSize', startSize);
+                            console.log('chunk', chunk.length);
+                            console.log(totalBuffer.length - startSize);
+                            // const startChunk = chunk.slice((totalBuffer.length - startSize), chunk.length);
+                            const startChunk = totalBuffer.slice(startSize);
+                            console.log('startChunk', startChunk.length);
+                            totalBuffer = totalBuffer.slice(0, startSize);
+                            chunkBuffer = Buffer.concat([header, startChunk]);
+                            console.log('start', chunkBuffer.length);
+                        }
+                        // else {
+                        // const header = totalBuffer.slice(previousOffset, previousOffset + 4);
+                        // const startChunk = totalBuffer.slice(startSize);
+                        // totalBuffer = totalBuffer.slice(0, startSize);
+                        // chunkBuffer = Buffer.concat([header, startChunk]);
+                        // chunkBuffer = Buffer.concat([chunkBuffer, chunk.slice(offset_)])
+                        // }
+                        //         // client.emit('audio', chunkBuffer);
+                        startSize = 0;
+                        chunkBuffer = Buffer.concat([chunkBuffer, chunk.slice(offset_)]);
+                    } else
+                        chunkBuffer = chunk.slice(offset_);
+                } else {
+                    console.log('sending chunk');
                     client.emit('audio', chunkBuffer);
-                    // chunkBuffer = null;
-                // } else {
-                //     chunkBuffer = chunkBuffer ? Buffer.concat([chunkBuffer, chunk.slice(offset_)]) : chunk.slice(offset_);
+                    console.log(chunkBuffer.length);
+                    //
                     chunkBuffer = chunk.slice(offset_);
-                offset_ = 0;
-
-                console.log('chunkBuffer1', chunkBuffer.length);
+                    // offset_ = 0;
+                    //
+                    //     // console.log('chunkBuffer1', chunkBuffer.length);
+                }
 
                 // }
             } else {
+                console.log('offset not found!!!!!!');
                 chunkBuffer = chunkBuffer ? Buffer.concat([chunkBuffer, chunk]) : chunk;
             }
+            // }
+            // else {
+            //     isStopped = false;
+            //     console.log('isStopped', isStopped);
+            // }
         });
 
-        // readStream_.on('end', () => {
-        //     client.emit('end', () => {
-        //     });
-        // });
-
-        // let tim1 = performance.now();
-        // fs.readFile(filePath, (err, data) => {
-        //     if (err) {
-        //         throw err;
-        //     }
-        //
-        //     let Xing_VBRI_header_position = null;
-        //     let offset = 0;
-        //     let framesBuffer = [];
-        //     let buffer = data;
-        //     let mpeg_version = null;
-        //     let layout_version = null;
-        //     let samples_number = null;
-        //
-        //     let chunkSize = null;
-        //     let chunkBuffer = null;
-        //
-        //     // while (offset <= data.length) {
-        //     while (buffer.length > 0) {
-        //         offset = buffer.indexOf(new Uint8Array([255, 251]), offset);
-        //
-        //         if (!fileDuration) {
-        //             Xing_VBRI_header_position = offset + 4 + 32;
-        //             console.log('xing ' + Xing_VBRI_header_position);
-        //             const info = buffer.slice(Xing_VBRI_header_position, Xing_VBRI_header_position + 4);
-        //             console.log('info', info.toString());
-        //
-        //             let numberOfFrames_position = null;
-        //             let sample_frequency = null;
-        //             let time_per_frame = null;
-        //             // console.log(info.compare(new Uint8Array([73, 110, 102, 111])) === 0);
-        //             if (info.compare(Buffer.from('Info')) === 0 || info.compare(Buffer.from('Xing')) === 0) {
-        //                 console.log('This is a VBR MP3 with Xing header');
-        //
-        //                 numberOfFrames_position = Xing_VBRI_header_position + 8;
-        //                 console.log('numberOfFrames_position ' + numberOfFrames_position);
-        //
-        //                 // console.log(buffer.slice(numberOfFrames_position, numberOfFrames_position + 4).readUIntBE(0, 4));
-        //                 numberOfFrames = parseInt(buffer.slice(numberOfFrames_position, numberOfFrames_position + 4).toString('hex'), 16);
-        //                 console.log("numberOfFrames", numberOfFrames);
-        //
-        //                 let binString = hex2bin(buffer.slice(offset, offset + 4).toString('hex'));
-        //                 console.log('sync', binString);
-        //
-        //                 mpeg_version = MPEG_version[binString.substr(11, 2)];
-        //                 console.log("mpeg_version", mpeg_version);
-        //                 layout_version = Layer_index[binString.substr(13, 2)];
-        //                 console.log("layout_version", layout_version);
-        //                 samples_number = samples_per_frame[mpeg_version][layout_version];
-        //                 // samples_number = samples_per_frame.get([mpeg_version, layout_version]);
-        //                 console.log("samples_number", samples_number);
-        //                 sample_frequency = Frequency_index[mpeg_version][binString.substr(20, 2)];
-        //                 console.log("sample_frequency", sample_frequency);
-        //                 time_per_frame = samples_number / sample_frequency;
-        //                 console.log("time_per_frame", time_per_frame);
-        //                 fileDuration = time_per_frame * numberOfFrames;
-        //                 console.log("fileDuration", fileDuration);
-        //             } else if (info.compare(Buffer.from('VBRI')) === 0) {
-        //                 console.log('This is a VBR MP3 with VBRI header');
-        //             } else {
-        //                 console.log('This is a CBR MP3');
-        //             }
-        //
-        //             chunkSize = fileSize / 10;
-        //             console.log('chunkSize', chunkSize);
-        //
-        //             client.emit('metadata', {
-        //                 fileSize, fileDuration, chunkSize
-        //             });
-        //         }
-        //
-        //         offset += 4;
-        //
-        //         let frame = buffer.slice(0, offset);
-        //         buffer = buffer.slice(offset);
-        //
-        //         // console.log(frame.length);
-        //
-        //         // framesBuffer.push(frame);
-        //
-        //         chunkBuffer = chunkBuffer ? Buffer.concat([chunkBuffer, frame]) : frame;
-        //
-        //         if (chunkBuffer.length >= chunkSize) {
-        //             console.log('!!!', chunkBuffer.length);
-        //
-        //             client.emit('audio', chunkBuffer);
-        //             chunkBuffer = null;
-        //         }
-        //
-        //         // if (framesBuffer.length === 20) {
-        //         //     let chunkBuffer = framesBuffer.reduce((a, b) => Buffer.concat([a, b]));
-        //         //     console.log('!!!', chunkBuffer.length);
-        //         //
-        //         //     // console.log('time 2', performance.now() - tim1);
-        //         //     client.emit('audio', chunkBuffer);
-        //         //     framesBuffer = [];
-        //         // }
-        //         // }
-        //         // }
-        //     }
-        //     // console.log('done');
-        //     client.emit('end', () => {
-        //     });
-        // });
-
-        // const HWM = 64 * 1024 * 10;
-
-        // const readStream_ = fs.createReadStream(filePath, {
-        //     highWaterMark: HWM,
-        //     // start: 0,
-        //     // end: numberOfChunks * HWM
-        //     // end: 3 * HWM
-        // });
-        //
-        // readStream_.on('data', chunk => {
-        //     console.log('chunk length', chunk.length);
-        //
-        //     const hexString = chunk.toString('hex');
-        //     // console.log(hexString);
-        //     // const binString_ = hex2bin(hexString_);
-        //     //
-        //     // console.log('bin string', binString_);
-        //     //
-        //     // binString += binString_;
-        //     // chunk = Buffer.concat([chunk, chunk_]);
-        //     //
-        //     let Frame_header_position = 0;
-        //     // let offset = Xing_VBRI_header_position;
-        //     let offset = 0;
-        //     // let numOfFrames = 5;
-        //     let framesBuffer = [];
-        //     while (offset <= hexString.length) {
-        //         const sync = hexString.substr(offset, 4);
-        //         if(sync === 'fffa' || sync === 'fffb') {
-        //             console.log('sync', sync);
-        //             console.log('numOfFrames', framesBuffer.length);
-        //             if(Frame_header_position !== 0) {
-        //                 let frame = chunk.subarray(Frame_header_position, offset);
-        //                 console.log(frame.length);
-        //
-        //                 framesBuffer.push(frame);
-        //
-        //                 if(framesBuffer.length === 5) {
-        //                     let chunkBuffer = framesBuffer.reduce((a, b) => Buffer.concat([a, b]));
-        //                     console.log(chunkBuffer.length);
-        //                     client.emit('audio', chunkBuffer);
-        //                     framesBuffer = [];
-        //                     // break;
-        //                 }
-        //             }
-        //             Frame_header_position = offset;
-        //         }
-        //         ++offset;
-        //
-        //     }
-        //     console.log('done');
-        //     // while (offset_ <= binString.length) {
-        //     //     const sync = binString.substr(offset_, 11);
-        //     //     if (sync === '11111111111') {
-        //     //         console.log(sync);
-        //     //         Frame_header_position += offset_;
-        //     //         break;
-        //     //     } else {
-        //     //         ++offset_;
-        //     //     }
-        //     // }
-        //     //
-        //     // client.emit('metadata',
-        //     //     {
-        //     //         fileSize,
-        //     //         numberOfFrames
-        //     //     }
-        //     // );
-        //     //
-        //     // console.log('Frame_header_position', Frame_header_position);
-        //     // console.log('first Frame_size', Frame_header_position / 8);
-        //     //
-        //     // chunkSize = Frame_header_position / 8;
-        //     //
-        //     // // console.log(binString.substr(First_Frame_header_position, Frame_header_position));
-        //     // console.log('is buffer', Buffer.isBuffer(chunk));
-        //     //
-        //     // let frame = chunk.subarray(0, Frame_header_position / 8);
-        //     // console.log(frame);
-        //     //
-        //     // // const data64 = Buffer.from(binString.substr(First_Frame_header_position, Frame_header_position), 'binary');
-        //     // // console.log('data64', data64);
-        //     //
-        //     // // const data64 = frame.toString('base64');
-        //     // // console.log(data64);
-        //     // // client.emit('audio', data64);
-        //
-        //     // client.emit('audio', chunk);
-        // });
+        readStream.once('end', () => {
+            client.emit('end');
+        });
 
         // const readStream_ = fs.createReadStream(filePath, {start:0, end:1024});
         //
@@ -526,8 +431,20 @@ io.on('connection', client => {
         // ss(client).emit('track-stream', stream);
     });
 
-    client.on('stop', () => {
+    client.on('stopLoad', (callback) => {
+        // if(readStream) {
+        //     readStream.pause();
+        // }
+        console.log('stpped');
 
+        try {
+            readStream && readStream.destroy();
+
+            callback('stopped');
+            // isStopped = true;
+        } catch (e) {
+            callback(e);
+        }
     });
 
     client.on('disconnect', () => {
