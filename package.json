@@ -18,7 +18,7 @@
     "firebase": "^7.14.3",
     "fs": "0.0.1-security",
     "http": "0.0.0",
-    "jsonwebtoken": "^8.5.1",
+    "jsonwebtoken": "^9.0.0",
     "node-id3": "^0.1.13",
     "nodemon": "^2.0.2",
     "path": "^0.12.7",
